@@ -1,0 +1,137 @@
+name: Build Linux Electron App
+
+on:
+  push:
+    branches: [ main ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up pnpm
+      uses: pnpm/action-setup@v4
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'pnpm'
+
+    - name: Install dependencies
+      run: pnpm install
+
+    - name: Extract App Info
+      id: get_info
+      run: |
+        APP_VERSION=$(node -p "require('./package.json').version")
+        PRODUCT_NAME=$(node -p "require('./package.json').build.productName")
+        SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+        BUILD_TIMESTAMP=$(date +%Y%m%d%H%M)
+
+        echo "APP_VERSION=$APP_VERSION" >> $GITHUB_ENV
+        echo "PRODUCT_NAME=$PRODUCT_NAME" >> $GITHUB_ENV
+        echo "SHORT_SHA=$SHORT_SHA" >> $GITHUB_ENV
+        echo "BUILD_TIMESTAMP=$BUILD_TIMESTAMP" >> $GITHUB_ENV
+
+        echo "version=$APP_VERSION" >> $GITHUB_OUTPUT
+        echo "product_name=$PRODUCT_NAME" >> $GITHUB_OUTPUT
+        echo "short_sha=$SHORT_SHA" >> $GITHUB_OUTPUT
+        echo "build_timestamp=$BUILD_TIMESTAMP" >> $GITHUB_OUTPUT
+
+    - name: Build Electron app
+      run: pnpm dist:linux
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: List Build Artifacts
+      run: |
+        echo "Contents of release directory:"
+        ls -lR release/
+
+    - name: Find Linux Installers
+      id: find_installers
+      run: |
+        # Find all Linux installer files in release directory
+        APPIMAGE_FILES=$(find release -name "*.AppImage" -type f)
+        DEB_FILES=$(find release -name "*.deb" -type f)
+        RPM_FILES=$(find release -name "*.rpm" -type f)
+
+        if [ -z "$APPIMAGE_FILES" ] && [ -z "$DEB_FILES" ] && [ -z "$RPM_FILES" ]; then
+          echo "Error: No Linux installer files found in release/"
+          ls -lR release/
+          exit 1
+        fi
+
+        echo "Found Linux installers:"
+        [ -n "$APPIMAGE_FILES" ] && echo "AppImage files:" && echo "$APPIMAGE_FILES"
+        [ -n "$DEB_FILES" ] && echo "Debian packages:" && echo "$DEB_FILES"
+        [ -n "$RPM_FILES" ] && echo "RPM packages:" && echo "$RPM_FILES"
+
+        # Store filenames in environment for potential future use
+        if [ -n "$APPIMAGE_FILES" ]; then
+          APPIMAGE_FILENAME=$(basename $(echo "$APPIMAGE_FILES" | head -n 1))
+          echo "APPIMAGE_FILENAME=$APPIMAGE_FILENAME" >> $GITHUB_ENV
+          echo "AppImage: $APPIMAGE_FILENAME"
+        fi
+
+        if [ -n "$DEB_FILES" ]; then
+          DEB_FILENAME=$(basename $(echo "$DEB_FILES" | head -n 1))
+          echo "DEB_FILENAME=$DEB_FILENAME" >> $GITHUB_ENV
+          echo "Debian package: $DEB_FILENAME"
+        fi
+
+        if [ -n "$RPM_FILES" ]; then
+          RPM_FILENAME=$(basename $(echo "$RPM_FILES" | head -n 1))
+          echo "RPM_FILENAME=$RPM_FILENAME" >> $GITHUB_ENV
+          echo "RPM package: $RPM_FILENAME"
+        fi
+
+    - name: Create GitHub Release
+      id: create_release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: |
+          release/*.AppImage
+          release/*.deb
+          release/*.rpm
+        tag_name: v${{ env.APP_VERSION }}-${{ env.SHORT_SHA }}-linux
+        name: Release v${{ env.APP_VERSION }} Linux (${{ env.BUILD_TIMESTAMP }}) (${{ env.SHORT_SHA }})
+        body: |
+          Automated Linux build for v${{ env.APP_VERSION }}.
+          Commit: ${{ github.sha }}
+          Short SHA: ${{ env.SHORT_SHA }}
+          Platform: Linux
+
+          ## Installation
+
+          ### AppImage (Universal)
+          Download the `.AppImage` file for a portable, distribution-agnostic executable:
+          1. Download the AppImage file
+          2. Make it executable: `chmod +x *.AppImage`
+          3. Run it: `./groq-desktop-*.AppImage`
+
+          ### Debian/Ubuntu (.deb)
+          For Debian-based distributions (Ubuntu, Mint, etc.):
+          ```bash
+          sudo dpkg -i groq-desktop_*.deb
+          sudo apt-get install -f  # Install dependencies if needed
+          ```
+
+          ### Red Hat/Fedora (.rpm)
+          For RPM-based distributions (Fedora, RHEL, CentOS, etc.):
+          ```bash
+          sudo rpm -i groq-desktop-*.rpm
+          # or
+          sudo dnf install groq-desktop-*.rpm
+          ```
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
