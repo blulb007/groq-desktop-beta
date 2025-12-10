@@ -36,7 +36,7 @@ win:
   target:
     - nsis
     - portable
-  icon: build/icon.ico
+  icon: public/icon.png
   publisherName: Groq
   verifyUpdateCodeSignature: false
   requestedExecutionLevel: asInvoker
@@ -45,15 +45,11 @@ nsis:
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
-  installerIcon: build/installerIcon.ico
-  uninstallerIcon: build/uninstallerIcon.ico
-  installerHeaderIcon: build/installerHeaderIcon.ico
   createDesktopShortcut: true
   createStartMenuShortcut: true
   shortcutName: Groq Desktop
   runAfterFinish: true
   deleteAppDataOnUninstall: false
-  include: build/installer.nsh
 
 # Linux Configuration
 linux:
