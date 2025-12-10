@@ -1,0 +1,118 @@
+name: Build Windows Electron App
+
+on:
+  push:
+    branches: [ main ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up pnpm
+      uses: pnpm/action-setup@v4
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'pnpm'
+
+    - name: Install dependencies
+      run: pnpm install
+
+    - name: Extract App Info
+      id: get_info
+      shell: pwsh
+      run: |
+        $package = Get-Content package.json | ConvertFrom-Json
+        $APP_VERSION = $package.version
+        $PRODUCT_NAME = $package.build.productName
+        $SHORT_SHA = "${{ github.sha }}".Substring(0,7)
+        $BUILD_TIMESTAMP = Get-Date -Format "yyyyMMddHHmm"
+
+        echo "APP_VERSION=$APP_VERSION" >> $env:GITHUB_ENV
+        echo "PRODUCT_NAME=$PRODUCT_NAME" >> $env:GITHUB_ENV
+        echo "SHORT_SHA=$SHORT_SHA" >> $env:GITHUB_ENV
+        echo "BUILD_TIMESTAMP=$BUILD_TIMESTAMP" >> $env:GITHUB_ENV
+
+        echo "version=$APP_VERSION" >> $env:GITHUB_OUTPUT
+        echo "product_name=$PRODUCT_NAME" >> $env:GITHUB_OUTPUT
+        echo "short_sha=$SHORT_SHA" >> $env:GITHUB_OUTPUT
+        echo "build_timestamp=$BUILD_TIMESTAMP" >> $env:GITHUB_OUTPUT
+
+    - name: Build Electron app
+      run: pnpm dist:win
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: List Build Artifacts
+      shell: pwsh
+      run: |
+        Write-Host "Contents of release directory:"
+        Get-ChildItem -Path release -Recurse | Format-Table -AutoSize
+
+    - name: Find Windows Installers
+      id: find_installers
+      shell: pwsh
+      run: |
+        # Find all .exe files in release directory
+        $exeFiles = Get-ChildItem -Path release -Filter "*.exe" -File
+
+        if ($exeFiles.Count -eq 0) {
+          Write-Host "Error: No .exe files found in release/"
+          Get-ChildItem -Path release -Recurse
+          exit 1
+        }
+
+        Write-Host "Found $($exeFiles.Count) installer(s):"
+        foreach ($file in $exeFiles) {
+          Write-Host "  - $($file.Name)"
+        }
+
+        # Store filenames in environment for potential future use
+        $setupFile = $exeFiles | Where-Object { $_.Name -like "*Setup*" } | Select-Object -First 1
+        $portableFile = $exeFiles | Where-Object { $_.Name -notlike "*Setup*" } | Select-Object -First 1
+
+        if ($setupFile) {
+          $setupFileName = $setupFile.Name
+          echo "SETUP_FILENAME=$setupFileName" >> $env:GITHUB_ENV
+          Write-Host "Setup installer: $setupFileName"
+        }
+
+        if ($portableFile) {
+          $portableFileName = $portableFile.Name
+          echo "PORTABLE_FILENAME=$portableFileName" >> $env:GITHUB_ENV
+          Write-Host "Portable executable: $portableFileName"
+        }
+
+    - name: Create GitHub Release
+      id: create_release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: release/*.exe
+        tag_name: v${{ env.APP_VERSION }}-${{ env.SHORT_SHA }}-windows
+        name: Release v${{ env.APP_VERSION }} Windows (${{ env.BUILD_TIMESTAMP }}) (${{ env.SHORT_SHA }})
+        body: |
+          Automated Windows build for v${{ env.APP_VERSION }}.
+          Commit: ${{ github.sha }}
+          Short SHA: ${{ env.SHORT_SHA }}
+          Platform: Windows
+
+          ## Installation
+
+          ### NSIS Installer (Recommended)
+          Download the file ending in `Setup.exe` for a traditional installer experience.
+
+          ### Portable Executable
+          Download the portable `.exe` file if you prefer a standalone executable without installation.
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
