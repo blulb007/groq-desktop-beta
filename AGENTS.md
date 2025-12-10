@@ -1,6 +1,6 @@
-# CLAUDE.md - AI Assistant Guide for Groq Desktop
+# AGENTS.md - LLM Agent Guide for Groq Desktop
 
-This document provides comprehensive guidance for AI assistants working on the Groq Desktop codebase. Last updated: 2025-12-09
+This document provides comprehensive guidance for LLM agents (AI assistants) working on the Groq Desktop codebase. This guide is platform-agnostic and designed for any LLM agent, including Claude, GPT, Llama, Gemini, and others. Last updated: 2025-12-10
 
 ## Project Overview
 
@@ -38,7 +38,7 @@ This document provides comprehensive guidance for AI assistants working on the G
 - **class-variance-authority** - Component variant management
 - **next-themes** - Theme management
 
-## Architecture
+## Architecture Overview
 
 ### Process Architecture
 
@@ -77,8 +77,8 @@ This document provides comprehensive guidance for AI assistants working on the G
 ### Directory Structure
 
 ```
-groq-desktop-beta/
-├── electron/                    # Main Process (Node.js)
+groq-desktop-beta-windows/
+├── electron/                    # Main Process (Node.js Backend)
 │   ├── main.js                 # App entry, window management, IPC setup
 │   ├── preload.js              # Context bridge (security boundary)
 │   ├── chatHandler.js          # Groq API communication (both modes)
@@ -100,7 +100,7 @@ groq-desktop-beta/
 │       ├── run-uvx.{sh,cmd,ps1}
 │       └── run-deno.{sh,cmd,ps1}
 │
-├── src/renderer/               # Renderer Process (React)
+├── src/renderer/               # Renderer Process (React Frontend)
 │   ├── main.jsx               # React entry point
 │   ├── App.jsx                # Main app component (chat orchestration)
 │   ├── index.css              # Global styles, CSS variables
@@ -125,9 +125,11 @@ groq-desktop-beta/
 │   │   └── ui/                # Reusable UI components (shadcn-style)
 │   │       ├── button.jsx
 │   │       ├── input.jsx
+│   │       ├── textarea.jsx
 │   │       ├── select.jsx
 │   │       ├── card.jsx
 │   │       ├── badge.jsx
+│   │       ├── label.jsx
 │   │       ├── Switch.jsx
 │   │       ├── SearchableSelect.jsx
 │   │       └── text-shimmer.jsx
@@ -154,11 +156,64 @@ groq-desktop-beta/
 └── pnpm-workspace.yaml        # pnpm workspace configuration
 ```
 
+## UI Files Quick Reference
+
+All custom UI components and styling are located in the following directories:
+
+### Main UI Directory
+**Location:** `src/renderer/`
+
+### Core UI Files
+- **Entry Point:** `src/renderer/main.jsx`
+- **Main App:** `src/renderer/App.jsx`
+- **Global Styles:** `src/renderer/index.css`
+
+### State Management
+- **Chat Context:** `src/renderer/context/ChatContext.jsx`
+
+### Pages
+- **Settings:** `src/renderer/pages/Settings.jsx`
+- **Popup:** `src/renderer/pages/PopupPage.jsx`
+
+### Main Components (src/renderer/components/)
+| File | Purpose |
+|------|---------|
+| `ChatInput.jsx` | Message input with image upload |
+| `MessageList.jsx` | Conversation message container |
+| `Message.jsx` | Individual message rendering |
+| `ToolCall.jsx` | Tool call display |
+| `ToolsPanel.jsx` | MCP server/tool management panel |
+| `ChatHistorySidebar.jsx` | Chat history sidebar |
+| `ToolApprovalModal.jsx` | Tool approval dialog |
+| `LogViewerModal.jsx` | API request log viewer |
+| `MarkdownRenderer.jsx` | Markdown rendering with syntax highlighting |
+
+### UI Primitives (src/renderer/components/ui/)
+| File | Purpose |
+|------|---------|
+| `button.jsx` | Button component |
+| `input.jsx` | Input field |
+| `textarea.jsx` | Text area |
+| `select.jsx` | Select dropdown |
+| `card.jsx` | Card container |
+| `badge.jsx` | Badge/pill component |
+| `label.jsx` | Form label |
+| `Switch.jsx` | Toggle switch |
+| `SearchableSelect.jsx` | Searchable dropdown |
+| `text-shimmer.jsx` | Animated text shimmer effect |
+
+### Styling Configuration
+- **Tailwind Config:** `tailwind.config.cjs`
+- **PostCSS Config:** `postcss.config.cjs`
+
+### Static Assets
+- **Icons/Images:** `public/` directory
+
 ## Key Subsystems
 
 ### 1. IPC Communication Pattern
 
-**All communication between renderer and main process goes through the preload bridge:**
+**All communication between renderer (frontend) and main process (backend) goes through the preload bridge:**
 
 ```javascript
 // electron/preload.js - Define API surface
@@ -249,13 +304,13 @@ const reader = response.body;
 - Responses API supports `pre_calculated_tool_responses` (server already executed tool)
 - Responses API supports `mcp_approval_request`/`mcp_approval_response` flow
 
-### 3. MCP Server Management
+### 3. MCP (Model Context Protocol) Server Management
 
 Located in `electron/mcpManager.js`
 
 #### Transport Types Supported
 
-1. **STDIO** - Local processes
+1. **STDIO** - Local processes (command-line tools)
 ```json
 {
   "type": "stdio",
@@ -265,7 +320,7 @@ Located in `electron/mcpManager.js`
 }
 ```
 
-2. **SSE** - Server-Sent Events (remote)
+2. **SSE** - Server-Sent Events (remote HTTP servers)
 ```json
 {
   "type": "sse",
@@ -274,7 +329,7 @@ Located in `electron/mcpManager.js`
 }
 ```
 
-3. **StreamableHTTP** - HTTP streaming (remote)
+3. **StreamableHTTP** - HTTP streaming (remote servers)
 ```json
 {
   "type": "streamableHttp",
@@ -306,20 +361,6 @@ discoveredTools.push(...tools.map(t => ({ ...t, serverId })));
 
 // 5. Notify renderer
 mainWindow.webContents.send('mcp-status-changed', { serverId, status: 'connected' });
-```
-
-#### Command Resolution
-
-Platform-aware command resolution in `electron/commandResolver.js`:
-
-```javascript
-// Resolves: npx, uvx, docker, node, deno, python, custom commands
-// Platform detection: win32, darwin, linux
-// Script selection: .sh (Mac/Linux), .cmd (Windows), .ps1 (PowerShell)
-// Special case: .sh vs -linux.sh for better compatibility
-
-const resolvedCommand = await resolveCommand('npx', args, env);
-// Returns: { command: '/path/to/run-npx.sh', args: [...] }
 ```
 
 ### 4. Tool Execution Flow
@@ -357,11 +398,6 @@ Check Approval Status (localStorage)
 - `prompt` - Ask for each tool (default)
 - `always` - Per-tool auto-approval (stored: `tool_approval_${toolName}`)
 - `yolo` - All tools auto-approved (stored: `tool_approval_yolo_mode`)
-
-**Remote Tools (Responses API):**
-- Server executes tools, returns `pre_calculated_tool_responses`
-- Approval via `mcp_approval_request` items (server asks client)
-- Client sends `mcp_approval_response` to continue
 
 ### 5. Authentication Systems
 
@@ -437,7 +473,7 @@ Located in `electron/chatHistoryManager.js`
 
 ### 7. State Management Pattern
 
-#### ChatContext (Global State)
+#### Global State (ChatContext)
 
 ```jsx
 // src/renderer/context/ChatContext.jsx
@@ -516,109 +552,6 @@ const models = await getModelsFromAPIWithCache(apiKey);
 }
 ```
 
-### 9. Message Pruning Strategy
-
-Located in `electron/messageUtils.js`
-
-```javascript
-// Goal: Keep messages under 50% of context window
-
-1. Calculate total tokens (rough estimate: chars * 0.3)
-2. If under limit, return messages as-is
-3. If over limit:
-   a. Keep system message (if present)
-   b. Keep last N user/assistant/tool message groups
-   c. Keep most recent reasoning/tool_calls
-   d. Remove oldest messages first
-   e. Never remove in-progress tool_call/tool_response pairs
-
-// Special handling
-- Vision messages: Count base64 images as ~800 tokens
-- Tool outputs: Limit to 20,000 chars each
-- Reasoning: Included in token count
-```
-
-### 10. Streaming Architecture
-
-```javascript
-// electron/chatHandler.js - Start stream
-ipcMain.handle('start-chat-stream', async (event, messages, model, options) => {
-  const stream = await createStreamingRequest(messages, model);
-  const eventId = `stream-${Date.now()}`;
-
-  for await (const chunk of stream) {
-    // Send progressive updates
-    if (chunk.choices[0].delta.content) {
-      event.sender.send(`chat-content-${eventId}`, {
-        content: chunk.choices[0].delta.content
-      });
-    }
-
-    if (chunk.choices[0].delta.reasoning_content) {
-      event.sender.send(`chat-reasoning-${eventId}`, {
-        reasoning: chunk.choices[0].delta.reasoning_content
-      });
-    }
-
-    if (chunk.choices[0].delta.tool_calls) {
-      event.sender.send(`chat-tool-calls-${eventId}`, {
-        toolCalls: chunk.choices[0].delta.tool_calls
-      });
-    }
-  }
-
-  event.sender.send(`chat-complete-${eventId}`, { finalMessage });
-});
-
-// src/renderer/App.jsx - Handle stream
-const handler = window.electron.startChatStream(messages, selectedModel);
-
-handler.onContent(({ content }) => {
-  // Update live message content
-  setMessages(prev => prev.map(msg =>
-    msg.id === streamingMessageId
-      ? { ...msg, content: msg.content + content }
-      : msg
-  ));
-});
-
-handler.onComplete(({ finalMessage }) => {
-  // Replace placeholder with final message
-  setMessages(prev => prev.map(msg =>
-    msg.id === streamingMessageId ? finalMessage : msg
-  ));
-  handler.cleanup();
-});
-```
-
-### 11. Reasoning Display
-
-```javascript
-// Two modes of reasoning display:
-
-// 1. Live Reasoning (during streaming)
-{
-  role: 'assistant',
-  content: '...',
-  isStreaming: true,
-  liveReasoning: 'Current reasoning chunk...',
-  reasoning_summary: 'Analyzing data'  // Background summarization
-}
-
-// 2. Final Reasoning (after completion)
-{
-  role: 'assistant',
-  content: '...',
-  reasoning_content: 'Full reasoning text...'
-}
-
-// Background Summarization (chatHandler.js)
-// - Every 2 seconds during reasoning
-// - Uses llama-3.1-8b-instant
-// - Generates 3-5 word summaries
-// - Can be disabled: settings.disableThinkingSummaries
-```
-
 ## Development Workflows
 
 ### Setup
@@ -629,7 +562,7 @@ npm install -g pnpm@10.9.0
 
 # 2. Clone repository
 git clone <repo-url>
-cd groq-desktop-beta
+cd groq-desktop-beta-windows
 
 # 3. Install dependencies
 pnpm install
@@ -667,11 +600,11 @@ pnpm test:paths       # Path handling test
 
 ### Hot Reload Behavior
 
-- **Renderer Process:** Full HMR via Vite
+- **Renderer Process (Frontend):** Full HMR via Vite
   - Changes to `src/renderer/**` → Instant reload
   - No app restart needed
 
-- **Main Process:** Manual restart required
+- **Main Process (Backend):** Manual restart required
   - Changes to `electron/**` → Must restart `pnpm dev`
   - Or use `nodemon`/`electron-reloader` (not configured by default)
 
@@ -756,72 +689,6 @@ function App() {
 
 **Storage:** Saved to `userData/settings.json` under `mcpServers` key.
 
-**Programmatic Example:**
-```json
-{
-  "mcpServers": {
-    "my-server": {
-      "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-memory"],
-      "env": {},
-      "timeout": 5000,
-      "autoConnect": true
-    }
-  }
-}
-```
-
-### Debugging
-
-#### Main Process Debugging
-
-```bash
-# 1. Add debugger statements or console.log
-console.log('Main process:', data);
-
-# 2. Open DevTools for main process
-# In electron/main.js, add:
-require('electron-debug')({ showDevTools: true });
-
-# Or use Chrome DevTools
-electron --inspect=5858 .
-# Then open chrome://inspect in Chrome
-```
-
-#### Renderer Process Debugging
-
-```bash
-# DevTools automatically open in development mode
-# Or manually in app: View → Toggle Developer Tools
-
-# React DevTools
-# Install extension: https://react.dev/learn/react-developer-tools
-```
-
-#### API Request Logging
-
-```javascript
-// Enable in Settings
-settings.enableApiLogging = true;
-
-// Logs saved to: /tmp/groq-api-request-YYYYMMDD-HHMMSS-ID.json
-// Contains: model, messages, tools, response, timestamps
-```
-
-#### MCP Connection Issues
-
-```javascript
-// Check logs
-console.log('MCP Status:', await window.electron.getMCPStatus());
-
-// Force reconnect
-await window.electron.reconnectMCPServer(serverId);
-
-// Check health
-await window.electron.checkMCPHealth(serverId);
-```
-
 ## Code Conventions
 
 ### File Naming
@@ -840,7 +707,7 @@ await window.electron.checkMCPHealth(serverId);
 // - Prop types: off (using TypeScript patterns, not enforced)
 // - JSX runtime: automatic (no need to import React)
 
-// Formatting preferences (inferred from codebase)
+// Formatting preferences
 // - 2-space indentation
 // - Single quotes for strings
 // - Semicolons required
@@ -916,9 +783,6 @@ git commit -m "feat: add new feature"
 # 3. Push to remote
 git push origin feature/my-feature
 
-# 4. Create pull request
-# Use GitHub UI or gh CLI
-
 # Commit message format (conventional commits)
 # feat: New feature
 # fix: Bug fix
@@ -930,26 +794,6 @@ git push origin feature/my-feature
 ```
 
 ## Common Tasks
-
-### Add New Model
-
-```javascript
-// Option 1: Let API discovery find it (automatic)
-// Models are fetched from Groq API every 5 minutes
-
-// Option 2: Add custom model in Settings UI
-// Settings → Models → Add Custom Model
-{
-  "modelId": "custom-model-name",
-  "displayName": "Custom Model",
-  "context": 8192,
-  "vision_supported": false,
-  "builtin_tools_supported": false
-}
-
-// Option 3: Programmatically in code
-// Edit shared/models.js or settings
-```
 
 ### Add New UI Component
 
@@ -968,10 +812,6 @@ export function MyComponent({ className, ...props }) {
     </div>
   );
 }
-
-# 2. Export from index (optional)
-# src/renderer/components/ui/index.js
-export * from './my-component';
 ```
 
 ### Add New Settings Field
@@ -998,67 +838,17 @@ const settings = await window.electron.getSettings();
 console.log(settings.newSetting);
 ```
 
-### Add New Tool (Built-in)
+### Modify UI Styling
 
 ```javascript
-// In electron/chatHandler.js
+// Option 1: Modify global styles
+// Edit: src/renderer/index.css
 
-// 1. Define tool schema
-const newTool = {
-  type: 'function',
-  function: {
-    name: 'new_tool',
-    description: 'Description of what this tool does',
-    parameters: {
-      type: 'object',
-      properties: {
-        param1: { type: 'string', description: 'Parameter description' }
-      },
-      required: ['param1']
-    }
-  }
-};
+// Option 2: Modify Tailwind configuration
+// Edit: tailwind.config.cjs
 
-// 2. Add to built-in tools array
-const builtInTools = [
-  // ... existing tools
-  newTool
-];
-
-// 3. Handle execution in toolHandler.js
-// Or implement custom handler in chatHandler.js
-```
-
-### Add Platform-Specific Script
-
-```bash
-# 1. Create scripts in electron/scripts/
-# run-mycmd.sh (Mac/Linux)
-#!/bin/bash
-mycmd "$@"
-
-# run-mycmd.cmd (Windows)
-@echo off
-mycmd %*
-
-# run-mycmd.ps1 (PowerShell)
-& mycmd @args
-
-# 2. Make executable
-chmod +x electron/scripts/run-mycmd.sh
-
-# 3. Add to electron-builder.yml asarUnpack
-asarUnpack:
-  - "electron/scripts/*.sh"
-  - "electron/scripts/*.cmd"
-  - "electron/scripts/*.ps1"
-
-# 4. Use in MCP server config
-{
-  "type": "stdio",
-  "command": "mycmd",  // Will resolve to run-mycmd.{sh,cmd,ps1}
-  "args": ["arg1", "arg2"]
-}
+// Option 3: Update component-specific styles
+// Edit the component file and update className attributes
 ```
 
 ## Performance Considerations
@@ -1122,195 +912,41 @@ asarUnpack:
 - Per-tool approval persistence (localStorage in renderer)
 - Sandboxed MCP servers (separate processes)
 
-## Testing
+## Debugging
 
-### Manual Testing
-
-```bash
-# Cross-platform tests
-pnpm test:platforms    # All platforms (requires Docker for Linux)
-pnpm test:paths        # Path handling only
-
-# Windows-specific
-.\test-windows.ps1
-
-# Test files:
-# - test-platform-detection.js (platform detection)
-# - test-resolver.js (command resolution)
-# - test-popup-window.js (popup window)
-```
-
-### Testing MCP Servers
+### Main Process Debugging
 
 ```bash
-# 1. Add test server in Settings
-# Example: Memory server
-{
-  "type": "stdio",
-  "command": "npx",
-  "args": ["-y", "@modelcontextprotocol/server-memory"]
-}
+# 1. Add debugger statements or console.log
+console.log('Main process:', data);
 
-# 2. Check connection status in Tools Panel
-# Should show "Connected" with green indicator
+# 2. Open DevTools for main process
+# In electron/main.js, add:
+require('electron-debug')({ showDevTools: true });
 
-# 3. Test tool execution
-# Send message: "Remember that my favorite color is blue"
-# Then: "What's my favorite color?"
-# Should use memory tool to recall
-
-# 4. Check logs
-# Settings → Enable API Logging
-# Check /tmp/groq-api-request-*.json for tool calls
+# Or use Chrome DevTools
+electron --inspect=5858 .
+# Then open chrome://inspect in Chrome
 ```
 
-### Testing OAuth Flows
+### Renderer Process Debugging
 
 ```bash
-# Google OAuth
-# 1. Get client credentials from Google Cloud Console
-# 2. Add to Settings → Google OAuth
-# 3. Click "Authorize"
-# 4. Complete browser flow
-# 5. Check token status (should show expiry time)
+# DevTools automatically open in development mode
+# Or manually in app: View → Toggle Developer Tools
 
-# MCP OAuth
-# 1. Configure OAuth-enabled MCP server
-# 2. Attempt connection
-# 3. Browser opens for authorization
-# 4. Complete flow
-# 5. Check connection status (should reconnect with tokens)
+# React DevTools
+# Install extension: https://react.dev/learn/react-developer-tools
 ```
 
-## Troubleshooting
-
-### "Electron failed to install correctly"
-
-```bash
-# Cause: pnpm blocked build scripts
-rm -rf node_modules
-pnpm install
-pnpm approve-builds  # Select electron, esbuild
-pnpm dev
-```
-
-### MCP Server Won't Connect
-
-```bash
-# 1. Check command/URL is correct
-# 2. Check timeout (increase if needed)
-# 3. Check logs in DevTools console
-# 4. Test command manually:
-node path/to/server.js  # For STDIO
-curl <url>             # For SSE/HTTP
-
-# 5. Check environment variables
-# 6. Try reconnecting via UI
-```
-
-### Streaming Stops Mid-Response
-
-```bash
-# Possible causes:
-# 1. Network timeout → Check internet connection
-# 2. API rate limit → Wait and retry
-# 3. Model error → Check API logs
-# 4. Token limit exceeded → Enable message pruning (on by default)
-
-# Check API logs (if enabled):
-ls /tmp/groq-api-request-*.json
-```
-
-### Chat History Not Saving
-
-```bash
-# 1. Check userData directory permissions
-# 2. Check disk space
-# 3. Check console for errors
-# 4. Verify currentChatId is set
-
-# Manual inspection:
-ls ~/Library/Application\ Support/Groq\ Desktop/chat-history/  # macOS
-ls %APPDATA%/Groq Desktop/chat-history/                       # Windows
-ls ~/.config/Groq\ Desktop/chat-history/                      # Linux
-```
-
-### Build Errors
-
-```bash
-# Vite build fails
-pnpm build          # Check output for errors
-# Common: Missing dependencies, syntax errors
-
-# Electron build fails
-pnpm build:electron # Check electron-builder output
-# Common: Icon missing, code signing issues, platform-specific errors
-
-# Platform-specific builds require:
-# macOS → macOS host (or CI)
-# Windows → Windows host or Wine
-# Linux → Linux host or Docker
-```
-
-## Deployment
-
-### Building Distributable
-
-```bash
-# 1. Update version in package.json
-{
-  "version": "1.0.1"
-}
-
-# 2. Build for target platform
-pnpm dist:mac    # macOS
-pnpm dist:win    # Windows
-pnpm dist:linux  # Linux
-
-# 3. Outputs in release/
-# macOS: Groq Desktop-1.0.1.dmg
-# Windows: Groq Desktop Setup 1.0.1.exe, Groq Desktop 1.0.1.exe (portable)
-# Linux: groq-desktop-1.0.1.AppImage, groq-desktop_1.0.1_amd64.deb, groq-desktop-1.0.1.x86_64.rpm
-```
-
-### Code Signing
-
-```bash
-# macOS
-# Set in environment or electron-builder.yml
-CSC_LINK=/path/to/certificate.p12
-CSC_KEY_PASSWORD=password
-
-# Windows
-# Set in electron-builder.yml
-win:
-  certificateFile: /path/to/certificate.pfx
-  certificatePassword: password
-
-# Or use environment variables
-CSC_LINK=/path/to/certificate.pfx
-CSC_KEY_PASSWORD=password
-```
-
-### Auto-Update (Not Configured)
+### API Request Logging
 
 ```javascript
-// To add auto-update:
-// 1. Install electron-updater
-pnpm add electron-updater
+// Enable in Settings
+settings.enableApiLogging = true;
 
-// 2. Configure in electron/main.js
-const { autoUpdater } = require('electron-updater');
-autoUpdater.checkForUpdatesAndNotify();
-
-// 3. Configure in electron-builder.yml
-publish:
-  provider: github
-  owner: your-org
-  repo: groq-desktop-beta
-
-// 4. Publish releases to GitHub
-# electron-builder will generate update files
+// Logs saved to: /tmp/groq-api-request-YYYYMMDD-HHMMSS-ID.json
+// Contains: model, messages, tools, response, timestamps
 ```
 
 ## Key Files Reference
@@ -1337,33 +973,32 @@ publish:
 | `src/renderer/App.jsx` | Main React component |
 | `index.html` | HTML entry point |
 
-### Core Modules
+### Core Backend Modules (electron/)
 
 | File | Purpose |
 |------|---------|
-| `electron/chatHandler.js` | Groq API communication |
-| `electron/mcpManager.js` | MCP server lifecycle |
-| `electron/toolHandler.js` | Tool execution |
-| `electron/authManager.js` | MCP OAuth flows |
-| `electron/googleOAuthManager.js` | Google OAuth refresh |
-| `electron/chatHistoryManager.js` | Chat persistence |
-| `electron/settingsManager.js` | Settings persistence |
-| `electron/commandResolver.js` | Platform-aware commands |
-| `electron/messageUtils.js` | Message pruning |
-| `shared/models.js` | Model configurations |
+| `chatHandler.js` | Groq API communication |
+| `mcpManager.js` | MCP server lifecycle |
+| `toolHandler.js` | Tool execution |
+| `authManager.js` | MCP OAuth flows |
+| `googleOAuthManager.js` | Google OAuth refresh |
+| `chatHistoryManager.js` | Chat persistence |
+| `settingsManager.js` | Settings persistence |
+| `commandResolver.js` | Platform-aware commands |
+| `messageUtils.js` | Message pruning |
 
-### React Components
+### Core Frontend Components (src/renderer/)
 
 | File | Purpose |
 |------|---------|
-| `src/renderer/App.jsx` | Main app orchestration |
-| `src/renderer/context/ChatContext.jsx` | Global chat state |
-| `src/renderer/pages/Settings.jsx` | Settings UI |
-| `src/renderer/components/ChatInput.jsx` | Message input |
-| `src/renderer/components/MessageList.jsx` | Message display |
-| `src/renderer/components/Message.jsx` | Individual message |
-| `src/renderer/components/ToolsPanel.jsx` | MCP tools UI |
-| `src/renderer/components/ToolApprovalModal.jsx` | Tool permissions |
+| `App.jsx` | Main app orchestration |
+| `context/ChatContext.jsx` | Global chat state |
+| `pages/Settings.jsx` | Settings UI |
+| `components/ChatInput.jsx` | Message input |
+| `components/MessageList.jsx` | Message display |
+| `components/Message.jsx` | Individual message |
+| `components/ToolsPanel.jsx` | MCP tools UI |
+| `components/ToolApprovalModal.jsx` | Tool permissions |
 
 ## Resources
 
@@ -1381,23 +1016,19 @@ publish:
 - **electron-builder:** https://www.electron.build/
 - **React Router:** https://reactrouter.com/
 
-### Community
-- **GitHub Issues:** https://github.com/groq/groq-desktop-beta/issues
-- **Groq Discord:** https://groq.com/discord
-
 ---
 
 ## Quick Reference: Common Patterns
 
-### IPC Call
+### IPC Call Pattern
 ```javascript
-// Renderer
+// Renderer (Frontend)
 const result = await window.electron.someFunction(arg);
 
-// Main
+// Main (Backend)
 ipcMain.handle('some-function', async (event, arg) => { return result; });
 
-// Preload
+// Preload (Bridge)
 contextBridge.exposeInMainWorld('electron', {
   someFunction: (arg) => ipcRenderer.invoke('some-function', arg)
 });
@@ -1449,5 +1080,34 @@ console.log(status[serverId]); // { status: 'connected', tools: [...] }
 
 ---
 
-**Last Updated:** 2025-12-09
-**Version:** Based on groq-desktop-beta at commit 342f3e9
+## Agent-Specific Notes
+
+### For Code Generation
+- Always read files before modifying them
+- Follow existing code patterns and conventions
+- Use the same formatting style (2 spaces, single quotes, semicolons)
+- Test changes in development mode (`pnpm dev`)
+
+### For Code Review
+- Check for security issues (context isolation, API key exposure)
+- Verify error handling is present
+- Ensure IPC communication follows the preload pattern
+- Verify React components use hooks properly
+
+### For Documentation
+- Update this file when making architectural changes
+- Keep code examples up to date
+- Document new IPC handlers in the relevant sections
+- Update version numbers and last updated date
+
+### For Troubleshooting
+- Check console logs in both main and renderer processes
+- Enable API logging for debugging API issues
+- Use DevTools for frontend debugging
+- Check MCP server connection status in Tools Panel
+
+---
+
+**Last Updated:** 2025-12-10
+**Repository:** groq-desktop-beta-windows
+**Target Audience:** All LLM agents (Claude, GPT, Llama, Gemini, etc.)
