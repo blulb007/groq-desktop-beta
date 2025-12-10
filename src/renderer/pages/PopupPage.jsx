@@ -608,9 +608,9 @@ const PopupPage = () => {
   }, [fullScreenImage]);
 
   return (
-    <div 
-      ref={popupRef} 
-      className="flex flex-col bg-neutral-50 backdrop-blur-xl animate-in fade-in-0 zoom-in-95 duration-300 scrollbar-none" 
+    <div
+      ref={popupRef}
+      className="flex flex-col bg-background backdrop-blur-xl animate-in fade-in-0 zoom-in-95 duration-300 scrollbar-none"
       style={{ WebkitAppRegion: 'drag' }}
     >
       
@@ -679,8 +679,8 @@ const PopupPage = () => {
       )}
 
       {/* Input Area */}
-      <div className={cn("bg-white backdrop-blur-sm rounded-b-3xl sticky bottom-0", {
-        "flex-1 flex items-center rounded-3xl": !isExpanded,
+      <div className={cn("bg-card backdrop-blur-sm rounded-b-3xl sticky bottom-0 border-t border-border", {
+        "flex-1 flex items-center rounded-3xl border-0": !isExpanded,
       })}>
         <div className="p-4 w-full space-y-3">
           {/* Header with Logo and Model Selector - Always visible */}

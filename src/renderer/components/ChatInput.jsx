@@ -300,11 +300,11 @@ function ChatInput({
 	const isAtMaxHeight = textareaHeight && maxHeightThreshold && textareaHeight >= maxHeightThreshold;
 
 	return (
-    <div 
+    <div
 			className={cn(
-				"flex flex-col gap-4 border border-[#CBCDC2] rounded-2xl w-full p-3 bg-[#E9E9DF] backdrop-blur-sm",
-				isDragOver 
-					? "border-primary border-2 bg-primary/5 transition-all duration-200" 
+				"flex flex-col gap-4 border border-border rounded-2xl w-full p-3 bg-card backdrop-blur-sm",
+				isDragOver
+					? "border-primary border-2 bg-primary/5 transition-all duration-200"
 					: ""
 			)}
 			onDragOver={handleDragOver}
@@ -431,7 +431,7 @@ function ChatInput({
 								variant="ghost"
 								size="sm"
 								onClick={() => fileInputRef.current?.click()}
-								className="text-muted-foreground hover:text-foreground hover:bg-white/40 hover:shadow-sm transition-all duration-200 rounded-xl px-3 py-1.5"
+								className="text-muted-foreground hover:text-foreground hover:bg-accent/20 hover:shadow-sm transition-all duration-200 rounded-xl px-3 py-1.5"
 								title={visionSupported ? "Upload file or image (max 5)" : "Upload files (images require vision-capable model)"}
 								disabled={loading}
 							>
@@ -456,7 +456,7 @@ function ChatInput({
 								variant="ghost"
 								size="sm"
 								onClick={onOpenMcpTools}
-								className="text-muted-foreground hover:text-foreground hover:bg-white/40 hover:shadow-sm transition-all duration-200 rounded-xl px-3 py-1.5"
+								className="text-muted-foreground hover:text-foreground hover:bg-accent/20 hover:shadow-sm transition-all duration-200 rounded-xl px-3 py-1.5"
 								title="Open MCP tools panel"
 								disabled={loading}
 							>
