@@ -1775,7 +1775,7 @@ function App() {
               
               {/* Status Badge */}
               {mcpTools.length > 0 && (
-                <Badge variant="secondary" className="bg-[#E9E9DF] hover:bg-[#E9E9DF]">
+                <Badge variant="secondary" className="bg-accent hover:bg-accent/80">
                   <Zap className="w-3 h-3 mr-1" />
                   {mcpTools.length} tools
                 </Badge>

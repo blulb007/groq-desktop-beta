@@ -195,8 +195,8 @@ function ChatHistorySidebar({ onNewChat, onChatLoaded, loading }) {
               className={`
                 relative group flex items-center gap-2 px-3 py-2 cursor-pointer
                 rounded-lg mx-2 transition-colors duration-150
-                ${currentChatId === chat.id 
-                  ? 'bg-[#E9E9DF] text-foreground' 
+                ${currentChatId === chat.id
+                  ? 'bg-accent text-accent-foreground'
                   : 'hover:bg-muted/50 text-foreground/80 hover:text-foreground'}
                 ${deletingChatId === chat.id ? 'opacity-50' : ''}
               `}
